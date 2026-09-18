@@ -418,7 +418,7 @@
   var statusById = {};
   STATUSES.forEach(function(s){ statusById[s.id] = s; });
 
-  var db = null, users = null, myId = null, canWrite = true;
+  var db = null, users = null, myId = null, canWrite = true, isEditor = true;
   var tasks = [];
   var settings = {defaultRate:95, currency:"USD"};
   var filter = "all";
@@ -522,7 +522,7 @@
   function renderBanner(){
     if (bannerLocked) return;
     var ex = tasks.filter(function(t){ return t.example; });
-    if (!ex.length || !canWrite){ banner(null); return; }
+    if (!ex.length || !canWrite || !isEditor){ banner(null); return; }
     banner(ex.length + (ex.length === 1 ? " example task is" : " example tasks are") + " on the board so it doesn't open empty.",
       "Remove " + (ex.length === 1 ? "it" : "them"), function(){
         ex.forEach(function(t){
@@ -924,10 +924,17 @@
     var sp = document.createElement("span");
     sp.className = "spacer";
     acts.appendChild(sp);
-    var del = document.createElement("button");
-    del.type = "button"; del.className = "btn danger"; del.dataset.act = "delete";
-    del.textContent = "Delete task"; del.disabled = !canWrite;
-    acts.appendChild(del);
+    if (isEditor){
+      var del = document.createElement("button");
+      del.type = "button"; del.className = "btn danger"; del.dataset.act = "delete";
+      del.textContent = "Delete task"; del.disabled = !canWrite;
+      acts.appendChild(del);
+    } else if (canWrite){
+      var hint = document.createElement("span");
+      hint.className = "stmt-foot"; hint.style.margin = "0";
+      hint.textContent = "Ask the board owner to delete a task.";
+      acts.appendChild(hint);
+    }
     d.appendChild(acts);
     return d;
   }
@@ -1510,9 +1517,11 @@
     claude.use("user").then(function(u){
       users = u;
       if (!u) return null;
-      return Promise.all([u.id(), u.can("data.write")]).then(function(r){
+      return Promise.all([u.id(), u.can("data.write"), u.canEdit()]).then(function(r){
         myId = r[0];
-        if (r[1] === false){ canWrite = false; render(); }
+        isEditor = r[2] !== false;
+        if (r[1] === false) canWrite = false;
+        render();
       });
     }).catch(function(){});
 
