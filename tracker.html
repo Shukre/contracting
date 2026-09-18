@@ -158,7 +158,7 @@
   .field.wide{grid-column:1 / -1}
   .field label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
   .field .hint{font-size:12px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400}
-  input[type=text],input[type=number],select,textarea{
+  input[type=text],input[type=number],input[type=date],select,textarea{
     border:1px solid var(--line-strong);background:var(--surface-2);color:var(--ink);
     border-radius:8px;padding:8px 10px;font-family:inherit;font-size:14px;width:100%;
   }
@@ -243,6 +243,12 @@
   .adjust{display:inline-flex;gap:4px;align-items:center;font-size:12px;color:var(--muted)}
   .adjust button{border:1px solid var(--line-strong);background:var(--surface);border-radius:6px;padding:3px 8px;cursor:pointer;font-family:var(--mono);font-size:12px}
   .adjust button:hover{background:var(--surface-2)}
+  .logrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}
+  .logrow input{width:auto;flex:0 1 auto;font-size:13px;padding:5px 8px}
+  .logrow input.dur{width:110px;font-family:var(--mono)}
+  .logrow input.day{width:150px}
+  .logrow button{border:1px solid var(--line-strong);background:var(--surface);border-radius:6px;padding:5px 11px;cursor:pointer;font-size:13px;font-weight:500}
+  .logrow button:hover{background:var(--surface-2)}
 
   .empty{
     text-align:center;color:var(--muted);border:1px dashed var(--line-strong);border-radius:var(--radius);
@@ -402,6 +408,24 @@
   function rateLabel(r){
     return (r % 1 === 0) ? money(r).replace(/[.,]00$/, "") : money(r);
   }
+  /* "1:30", "1.5", "90m", "1h30" all mean ninety minutes. */
+  function parseDuration(raw){
+    raw = (raw||"").trim().toLowerCase();
+    if (!raw) return 0;
+    var m = raw.match(/^(\d+):([0-5]?\d)$/);
+    if (m) return (Number(m[1])*60 + Number(m[2])) * 60000;
+    m = raw.match(/^(\d+(?:\.\d+)?)\s*h(?:ours?)?\s*(\d+)?\s*m?$/);
+    if (m) return (Number(m[1])*60 + Number(m[2]||0)) * 60000;
+    m = raw.match(/^(\d+(?:\.\d+)?)\s*m(?:in(?:utes?)?)?$/);
+    if (m) return Number(m[1]) * 60000;
+    m = raw.match(/^(\d+(?:\.\d+)?)$/);
+    if (m) return Number(m[1]) * 3600000;
+    return null;
+  }
+  function todayISO(){
+    var d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  }
   function clock(ms){
     ms = Math.max(0, ms||0);
     var t = Math.floor(ms/1000);
@@ -460,6 +484,7 @@
           if (db && !localOnly) db.doc("tasks/" + t.id).delete().catch(function(){});
         });
         render();
+        saveLocal();
         toast("Examples removed.");
       });
   }
@@ -514,11 +539,25 @@
     for (var i=0;i<tasks.length;i++) if (tasks[i].id === id) return tasks[i];
     return null;
   }
+  function saveLocal(){
+    if (!localOnly) return;
+    try { localStorage.setItem("billable.local", JSON.stringify({tasks:tasks, settings:settings})); } catch(e){}
+  }
+  function loadLocal(){
+    try {
+      var raw = localStorage.getItem("billable.local");
+      if (!raw) return;
+      var d = JSON.parse(raw);
+      if (d && d.settings && typeof d.settings.defaultRate === "number") settings.defaultRate = d.settings.defaultRate;
+      if (d && Array.isArray(d.tasks)) tasks = d.tasks.map(function(t){ return normalize(t.id || newId(), t); });
+    } catch(e){}
+  }
+
   function writeTask(id, patch){
     var t = byId(id);
     if (t) { for (var k in patch) t[k] = patch[k]; t.updatedAt = patch.updatedAt || Date.now(); }
     render();
-    if (!db || localOnly) return Promise.resolve();
+    if (!db || localOnly){ saveLocal(); return Promise.resolve(); }
     patch.updatedAt = patch.updatedAt || Date.now();
     return db.doc("tasks/" + id).update(patch).catch(function(e){
       if (e && e.code === "invalid_argument"){ canWrite = false; render(); toast("You have read-only access to this board."); }
@@ -772,6 +811,24 @@
       adj.appendChild(b);
     });
     tf.appendChild(adj);
+
+    var log = document.createElement("div");
+    log.className = "logrow";
+    var day = document.createElement("input");
+    day.type = "date"; day.className = "day"; day.dataset.role = "logday";
+    day.value = todayISO(); day.max = todayISO(); day.disabled = !canWrite;
+    day.setAttribute("aria-label", "Date of the work");
+    var dur = document.createElement("input");
+    dur.type = "text"; dur.className = "dur"; dur.dataset.role = "logdur";
+    dur.placeholder = "1:30 or 1.5"; dur.disabled = !canWrite;
+    dur.setAttribute("aria-label", "How long it took");
+    var go = document.createElement("button");
+    go.type = "button"; go.dataset.act = "logtime"; go.textContent = "Log it";
+    go.disabled = !canWrite;
+    log.appendChild(day); log.appendChild(dur); log.appendChild(go);
+    tf.appendChild(log);
+
+    tf.className = "field wide";
     grid.appendChild(tf);
 
     var nf = document.createElement("div");
@@ -798,7 +855,7 @@
       t.sessions.slice().reverse().forEach(function(se){
         var li = document.createElement("li");
         var left = document.createElement("span");
-        left.textContent = dateShort(se.start) + "  " + (se.manual ? "adjustment" : timeShort(se.start) + "–" + timeShort(se.end));
+        left.textContent = dateShort(se.start) + "  " + (se.logged ? "logged by hand" : (se.manual ? "adjustment" : timeShort(se.start) + "–" + timeShort(se.end)));
         var right = document.createElement("span");
         right.textContent = (se.ms < 0 ? "−" : "") + clock(Math.abs(se.ms));
         li.appendChild(left); li.appendChild(right);
@@ -876,9 +933,17 @@
     } else {
       emptyEl.hidden = true;
     }
-    $("footCount").textContent = tasks.length + (tasks.length === 1 ? " task" : " tasks") +
-      " · showing " + vis.length + (localOnly ? " · this browser only" : "");
+    renderFooterTotals();
     resolveNames();
+  }
+
+  function renderFooterTotals(){
+    var vis = visibleTasks();
+    var ms = vis.reduce(function(a,t){ return a + elapsedOf(t); }, 0);
+    var amt = vis.reduce(function(a,t){ return a + amountOf(t); }, 0);
+    $("footCount").textContent = tasks.length + (tasks.length === 1 ? " task" : " tasks") +
+      " · showing " + vis.length + " · " + hours(ms).toFixed(2) + " h · " + money(amt) +
+      (localOnly ? " · this browser only" : "");
   }
 
   function render(){
@@ -940,6 +1005,7 @@
       if (m) m.textContent = money(amountOf(t)) + " · " + rateLabel(rateOf(t)) + "/hr";
     });
     renderStats();
+    renderFooterTotals();
   }
   setInterval(tick, 1000);
 
@@ -981,6 +1047,16 @@
       sessions: sessions
     });
   }
+  function logEntry(t, dayStr, ms){
+    var parts = (dayStr||"").split("-");
+    var start = parts.length === 3
+      ? new Date(Number(parts[0]), Number(parts[1])-1, Number(parts[2]), 12, 0, 0).getTime()
+      : Date.now();
+    var sessions = (t.sessions||[]).concat([{start:start, end:start+ms, ms:ms, logged:true, by:myId||null}]).slice(-60);
+    sessions.sort(function(a,b){ return (a.start||0) - (b.start||0); });
+    writeTask(t.id, {accruedMs:(t.accruedMs||0) + ms, sessions:sessions});
+  }
+
   function adjust(t, minutes){
     var ms = minutes * 60000;
     var next = (t.accruedMs||0) + ms;
@@ -1005,6 +1081,15 @@
       renderList();
     } else if (act === "timer"){
       if (t.runningSince) stopTimer(t); else startTimer(t);
+    } else if (act === "logtime"){
+      var drawer = row.querySelector(".detail");
+      var dayEl = drawer.querySelector('[data-role="logday"]');
+      var durEl = drawer.querySelector('[data-role="logdur"]');
+      var ms = parseDuration(durEl.value);
+      if (ms === null){ toast("Give a length like 1:30, 1.5 or 90m."); durEl.focus(); return; }
+      if (!ms){ durEl.focus(); return; }
+      logEntry(t, dayEl.value, ms);
+      toast("Logged " + clock(ms) + " on " + dateShort(new Date(dayEl.value + "T12:00:00").getTime()) + ".");
     } else if (act === "adjust"){
       adjust(t, Number(btn.dataset.min));
     } else if (act === "bill"){
@@ -1013,6 +1098,7 @@
       if (!confirm("Delete “" + t.title + "”? Its logged time goes with it.")) return;
       tasks = tasks.filter(function(x){ return x.id !== t.id; });
       render();
+      saveLocal();
       if (db && !localOnly) db.doc("tasks/" + t.id).delete().catch(function(){ toast("Could not delete that task."); });
     } else if (act === "save"){
       var detail = row.querySelector(".detail");
@@ -1107,6 +1193,7 @@
     form.hidden = true;
     filter = "all";
     render();
+    saveLocal();
     if (db && !localOnly){
       db.doc("tasks/" + id).set(doc).catch(function(e){
         if (e && e.code === "invalid_argument"){ canWrite = false; render(); toast("You have read-only access to this board."); }
@@ -1127,6 +1214,7 @@
     $("saveState").textContent = "saving…";
     rateTimer = setTimeout(function(){
       renderStats(); renderList();
+      saveLocal();
       if (db && !localOnly){
         db.doc("settings/app").set({defaultRate:v, currency:settings.currency}).then(function(){
           $("saveState").textContent = "saved";
@@ -1166,7 +1254,9 @@
       new Date().toISOString().slice(0,10) + ".csv";
     claude.use("downloads").then(function(dl){
       if (!dl){ toast("Downloads are not available in this view."); return; }
-      return dl.save({filename:name, data:csv}).then(function(){ toast("Timesheet saved."); });
+      return dl.save({filename:name, data:csv}).then(function(){
+        toast("Timesheet saved — " + (rows.length - 1) + (rows.length === 2 ? " task." : " tasks."));
+      });
     }).catch(function(){ toast("Export was cancelled."); });
   });
 
@@ -1194,7 +1284,9 @@
 
   if (typeof window.claude === "undefined" || !window.claude.use){
     localOnly = true;
-    banner("Running without the shared store — tasks you add stay in this browser only.", null, null, true);
+    loadLocal();
+    defRate.value = settings.defaultRate;
+    banner("Running without the shared store — tasks are saved in this browser only.", null, null, true);
     render();
   } else {
     claude.use("user").then(function(u){
@@ -1209,7 +1301,9 @@
     claude.use("db").then(function(d){
       if (!d){
         localOnly = true;
-        banner("Shared store unavailable here — tasks you add stay in this browser only.", null, null, true);
+        loadLocal();
+        defRate.value = settings.defaultRate;
+        banner("Shared store unavailable here — tasks are saved in this browser only.", null, null, true);
         render();
         return;
       }
@@ -1231,7 +1325,7 @@
         else banner("Live updates dropped. Reload to reconnect.", null, null, true);
       });
     }).catch(function(){
-      localOnly = true; render();
+      localOnly = true; loadLocal(); render();
     });
   }
 })();

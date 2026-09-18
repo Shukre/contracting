@@ -18,8 +18,9 @@ timer for billing, and links to its GitHub issue and pull request.
 - **Payment tracking** — a default hourly rate with a per-task override, running
   totals for the last 7 days and everything unbilled, a per-task "Mark invoiced"
   flag, and a CSV timesheet export of whatever is currently filtered.
-- **Manual corrections** — ±5m / ±15m / +1h adjustments and a per-task log of
-  every time entry, so a forgotten timer doesn't cost an hour.
+- **Manual corrections** — ±5m / ±15m / +1h adjustments, a backdated entry
+  ("Sep 11, 1:30") for work you did before you opened the board, and a per-task
+  log of every time entry. Durations parse as `1:30`, `1.5`, `90m` or `1h30`.
 - **Clients** — tag a task with a client, filter the board to one, and every
   total (tracked, unbilled, open) follows that filter. The CSV export is scoped
   to it too and names the file after it.
@@ -47,5 +48,5 @@ leaves them read-only (the page disables the controls it knows they cannot use).
 `tracker.html` is the published page. It is written in artifact form — no
 `<!doctype>`, `<html>`, `<head>` or `<body>` wrapper, since the platform supplies
 those at publish time. Shared state lives in the artifact's document store
-(`tasks/*` and `settings/app`); the page falls back to browser-local state when
-that store is unavailable.
+(`tasks/*` and `settings/app`). When that store is unavailable the page says so
+and keeps tasks in `localStorage` for that browser instead.
