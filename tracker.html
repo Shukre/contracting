@@ -108,8 +108,9 @@
     display:flex;align-items:center;gap:8px;font-size:13px;
     padding:5px 11px 5px 9px;border-radius:999px;
     background:var(--accent-soft);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);
-    font-weight:600;
+    font-weight:600;max-width:min(360px,52vw);
   }
+  .onclock span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dot{width:7px;height:7px;border-radius:50%;background:currentColor;animation:pulse 1.6s ease-in-out infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
   @media (prefers-reduced-motion: reduce){.dot{animation:none}}
@@ -174,10 +175,10 @@
     padding:0;overflow:hidden;box-shadow:var(--shadow);
   }
   .task.running{border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
-  .stripe{align-self:stretch;background:var(--muted)}
+  .stripe{grid-row:1 / -1;align-self:stretch;background:var(--muted)}
   .task .body{padding:13px 0;min-width:0}
-  .t-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .t-title{font-family:var(--display);font-size:16px;font-weight:600;margin:0;letter-spacing:-.01em;word-break:break-word}
+  .t-top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .t-title{font-family:var(--display);font-size:16px;font-weight:600;margin:0;letter-spacing:-.01em;overflow-wrap:anywhere;flex:0 1 auto;min-width:0}
   .t-title.done{text-decoration:line-through;text-decoration-color:var(--line-strong)}
   .t-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px}
   .ghlink{
@@ -213,7 +214,7 @@
   .timerbtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
   :root[data-theme="dark"] .timerbtn.on{color:#16130a}
   @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .timerbtn.on{color:#16130a}}
-  .disc{border:none;background:transparent;cursor:pointer;color:var(--muted);padding:2px 4px;font-size:12px;line-height:1}
+  .disc{border:none;background:transparent;cursor:pointer;color:var(--muted);padding:2px 4px;font-size:12px;line-height:1;flex:none;align-self:baseline}
 
   @media (max-width:700px){
     .task{grid-template-columns:4px minmax(0,1fr);row-gap:0}
@@ -226,7 +227,7 @@
   @media (max-width:700px){.task>.body{padding-left:14px}.t-time,.t-act{padding-left:14px}}
 
   /* ---------- detail drawer ---------- */
-  .detail{grid-column:1 / -1;border-top:1px solid var(--line);background:var(--surface-2);padding:14px}
+  .detail{grid-column:2 / -1;border-top:1px solid var(--line);background:var(--surface-2);padding:14px}
   .detail .grid{gap:10px}
   .sessions{margin-top:12px}
   .sessions h4{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 6px;font-weight:600}
@@ -370,6 +371,9 @@
     try {
       return new Intl.NumberFormat(undefined,{style:"currency",currency:settings.currency||"USD"}).format(n||0);
     } catch(e){ return "$" + (n||0).toFixed(2); }
+  }
+  function rateLabel(r){
+    return (r % 1 === 0) ? money(r).replace(/[.,]00$/, "") : money(r);
   }
   function clock(ms){
     ms = Math.max(0, ms||0);
@@ -614,7 +618,7 @@
     time.appendChild(e);
     var m = document.createElement("div");
     m.className = "money"; m.dataset.money = t.id;
-    m.textContent = money(amountOf(t)) + " · " + money(rateOf(t)) + "/hr";
+    m.textContent = money(amountOf(t)) + " · " + rateLabel(rateOf(t)) + "/hr";
     time.appendChild(m);
     el.appendChild(time);
 
@@ -642,7 +646,7 @@
 
     grid.appendChild(fieldInput("Issue (URL or owner/repo#123)", "issue", t.issue ? t.issue.url : "", t.id));
     grid.appendChild(fieldInput("Pull request", "pr", t.pr ? t.pr.url : "", t.id));
-    grid.appendChild(fieldInput("Hourly rate for this task", "rate", t.rate === null ? "" : String(t.rate), t.id, "number", "default " + money(settings.defaultRate)));
+    grid.appendChild(fieldInput("Hourly rate for this task", "rate", t.rate === null ? "" : String(t.rate), t.id, "number", "default " + rateLabel(Number(settings.defaultRate))));
 
     var tf = document.createElement("div");
     tf.className = "field";
@@ -773,13 +777,16 @@
       ? running.length + (running.length === 1 ? " timer running" : " timers running")
       : "nothing running";
 
-    var since = Date.now() - 7*24*3600*1000, weekMs = 0;
+    var since = Date.now() - 7*24*3600*1000, weekMs = 0, weekAmount = 0;
     tasks.forEach(function(t){
-      (t.sessions||[]).forEach(function(s){ if ((s.end||s.start) >= since) weekMs += (s.ms||0); });
-      if (t.runningSince) weekMs += Date.now() - Math.max(t.runningSince, since);
+      var ms = 0;
+      (t.sessions||[]).forEach(function(s){ if ((s.end||s.start) >= since) ms += (s.ms||0); });
+      if (t.runningSince) ms += Date.now() - Math.max(t.runningSince, since);
+      weekMs += ms;
+      weekAmount += hours(ms) * rateOf(t);
     });
     $("statWeek").textContent = hours(weekMs).toFixed(2) + " h";
-    $("statWeekNote").textContent = money(hours(weekMs) * Number(settings.defaultRate||0)) + " at the default rate";
+    $("statWeekNote").textContent = money(weekAmount) + " earned";
 
     var unbilled = tasks.filter(function(t){ return !t.billed; }).reduce(function(a,t){ return a + amountOf(t); }, 0);
     $("statUnbilled").textContent = money(unbilled);
@@ -795,7 +802,7 @@
     if (running.length){
       chip.hidden = false;
       $("onclockText").textContent = running.length === 1
-        ? clock(Date.now() - running[0].runningSince) + " · " + running[0].title.slice(0,28)
+        ? clock(Date.now() - running[0].runningSince) + " · " + running[0].title
         : running.length + " timers · " + clock(runningMs);
     } else {
       chip.hidden = true;
@@ -808,7 +815,7 @@
       var e = listEl.querySelector('[data-elapsed="' + t.id + '"]');
       if (e) e.textContent = clock(elapsedOf(t));
       var m = listEl.querySelector('[data-money="' + t.id + '"]');
-      if (m) m.textContent = money(amountOf(t)) + " · " + money(rateOf(t)) + "/hr";
+      if (m) m.textContent = money(amountOf(t)) + " · " + rateLabel(rateOf(t)) + "/hr";
     });
     renderStats();
   }
