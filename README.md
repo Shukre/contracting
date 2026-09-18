@@ -20,9 +20,18 @@ timer for billing, and links to its GitHub issue and pull request.
   flag, and a CSV timesheet export of whatever is currently filtered.
 - **Manual corrections** — ±5m / ±15m / +1h adjustments and a per-task log of
   every time entry, so a forgotten timer doesn't cost an hour.
+- **Clients** — tag a task with a client, filter the board to one, and every
+  total (tracked, unbilled, open) follows that filter. The CSV export is scoped
+  to it too and names the file after it.
+- **Runaway timer warning** — a timer running longer than four hours flags
+  itself on the row, so an overnight timer doesn't quietly become nine
+  billable hours.
 - **Anyone with access can add tasks** — the board is backed by the artifact's
   shared store, so tasks, timers and status changes are live for every viewer.
-  The page shows who added each task.
+  The page shows who added each task, and flags when a teammate is the one
+  timing it.
+- **Keyboard** — `n` opens the new-task form, `Esc` closes it. The board
+  remembers your status and client filter between visits.
 
 The board opens with three tasks tagged **Example** — delete them once your own
 work is on it.

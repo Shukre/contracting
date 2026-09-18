@@ -178,7 +178,8 @@
   .stripe{grid-row:1 / -1;align-self:stretch;background:var(--muted)}
   .task .body{padding:13px 0;min-width:0}
   .t-top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
-  .t-title{font-family:var(--display);font-size:16px;font-weight:600;margin:0;letter-spacing:-.01em;overflow-wrap:anywhere;flex:0 1 auto;min-width:0}
+  .titlerow{display:flex;align-items:baseline;gap:8px;min-width:0;flex:0 1 auto}
+  .t-title{font-family:var(--display);font-size:16px;font-weight:600;margin:0;letter-spacing:-.01em;overflow-wrap:anywhere;min-width:0}
   .t-title.done{text-decoration:line-through;text-decoration-color:var(--line-strong)}
   .t-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px}
   .ghlink{
@@ -188,6 +189,10 @@
   .ghlink:hover{border-color:var(--line-strong);color:var(--ink);background:var(--surface-2)}
   .ghlink .kind{color:var(--muted)}
   .who{font-size:12px;color:var(--muted)}
+  .runby{font-size:12px;color:var(--accent);font-weight:600}
+  .client{font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:1px 7px;white-space:nowrap}
+  .warn{font-size:11px;font-weight:600;color:var(--st-blocked);border:1px solid color-mix(in srgb,var(--st-blocked) 40%,transparent);border-radius:999px;padding:1px 9px;white-space:nowrap}
+  select.clientfilter{width:auto;font-size:13px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface)}
   .tag{font-size:11px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;color:var(--muted);border:1px dashed var(--line-strong);border-radius:5px;padding:1px 6px}
   .tag.paid{color:var(--st-merged);border-style:solid;border-color:color-mix(in srgb,var(--st-merged) 40%,transparent)}
   select.status{
@@ -246,7 +251,10 @@
   .empty strong{display:block;font-family:var(--display);color:var(--ink);font-size:16px;margin-bottom:4px}
   .foot{margin-top:28px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:12px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
   .foot .spacer{margin-left:auto}
-  .banner{background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);color:var(--accent);border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:14px}
+  .banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);color:var(--accent);border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:14px}
+  .banner-act{border:1px solid currentColor;background:transparent;color:inherit;border-radius:6px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer}
+  .banner-act:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+  .empty .btn{margin-top:14px}
   .toast{
     position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));
     background:var(--ink);color:var(--paper);padding:9px 16px;border-radius:999px;font-size:13px;z-index:50;
@@ -308,6 +316,10 @@
         <input type="text" id="f-pr" name="pr" placeholder="owner/repo#128">
       </div>
       <div class="field">
+        <label for="f-client">Client <span class="hint">— optional</span></label>
+        <input type="text" id="f-client" name="client" list="clientList" placeholder="Northwind">
+      </div>
+      <div class="field">
         <label for="f-status">Status</label>
         <select id="f-status" name="status"></select>
       </div>
@@ -326,6 +338,7 @@
     </div>
   </form>
 
+  <datalist id="clientList"></datalist>
   <nav class="filters" id="filters" aria-label="Filter by status"></nav>
 
   <div class="list" id="list"></div>
@@ -357,13 +370,27 @@
   var tasks = [];
   var settings = {defaultRate:95, currency:"USD"};
   var filter = "all";
+  var client = "all";
   var search = "";
+  var bannerLocked = false;
+  var RUNAWAY_MS = 4*3600*1000;
   var openRows = {};
   var profiles = {};
   var unsub = null;
   var localOnly = false;
 
   var $ = function(id){ return document.getElementById(id); };
+
+  function loadPrefs(){
+    try {
+      var p = JSON.parse(localStorage.getItem("billable.view") || "{}");
+      if (typeof p.filter === "string") filter = p.filter;
+      if (typeof p.client === "string") client = p.client;
+    } catch(e){}
+  }
+  function savePrefs(){
+    try { localStorage.setItem("billable.view", JSON.stringify({filter:filter, client:client})); } catch(e){}
+  }
   var listEl = $("list"), emptyEl = $("empty"), filtersEl = $("filters");
 
   /* ---------- helpers ---------- */
@@ -407,10 +434,34 @@
     document.body.appendChild(el);
     setTimeout(function(){ el.remove(); }, 2600);
   }
-  function banner(msg){
+  function banner(msg, actionLabel, onClick, lock){
     var b = $("banner");
+    b.textContent = "";
     if (!msg){ b.hidden = true; return; }
-    b.textContent = msg; b.hidden = false;
+    b.appendChild(document.createTextNode(msg));
+    if (actionLabel){
+      var a = document.createElement("button");
+      a.type = "button"; a.className = "banner-act"; a.textContent = actionLabel;
+      a.addEventListener("click", onClick);
+      b.appendChild(a);
+    }
+    b.hidden = false;
+    if (lock) bannerLocked = true;
+  }
+
+  function renderBanner(){
+    if (bannerLocked) return;
+    var ex = tasks.filter(function(t){ return t.example; });
+    if (!ex.length || !canWrite){ banner(null); return; }
+    banner(ex.length + (ex.length === 1 ? " example task is" : " example tasks are") + " on the board so it doesn't open empty.",
+      "Remove " + (ex.length === 1 ? "it" : "them"), function(){
+        ex.forEach(function(t){
+          tasks = tasks.filter(function(x){ return x.id !== t.id; });
+          if (db && !localOnly) db.doc("tasks/" + t.id).delete().catch(function(){});
+        });
+        render();
+        toast("Examples removed.");
+      });
   }
 
   /* Accepts a full GitHub URL, owner/repo#123, or a bare number (with a repo already known). */
@@ -444,6 +495,7 @@
       title: String(d.title||"Untitled task"),
       status: statusById[d.status] ? d.status : "in_development",
       notes: d.notes ? String(d.notes) : "",
+      client: d.client ? String(d.client) : "",
       rate: (d.rate === 0 || d.rate) ? Number(d.rate) : null,
       accruedMs: Number(d.accruedMs||0),
       runningSince: d.runningSince ? Number(d.runningSince) : null,
@@ -475,12 +527,20 @@
   }
 
   /* ---------- rendering ---------- */
+  function scopedTasks(){
+    return client === "all" ? tasks : tasks.filter(function(t){ return (t.client||"") === client; });
+  }
+  function clientNames(){
+    var seen = {}, out = [];
+    tasks.forEach(function(t){ if (t.client && !seen[t.client]){ seen[t.client] = 1; out.push(t.client); } });
+    return out.sort(function(a,b){ return a.localeCompare(b); });
+  }
   function visibleTasks(){
     var q = search.toLowerCase();
-    return tasks.filter(function(t){
+    return scopedTasks().filter(function(t){
       if (filter !== "all" && t.status !== filter) return false;
       if (!q) return true;
-      var hay = (t.title + " " + (t.notes||"") + " " + ((t.issue&&t.issue.repo)||"") + " " + ((t.pr&&t.pr.repo)||"")).toLowerCase();
+      var hay = (t.title + " " + (t.notes||"") + " " + (t.client||"") + " " + ((t.issue&&t.issue.repo)||"") + " " + ((t.pr&&t.pr.repo)||"")).toLowerCase();
       return hay.indexOf(q) !== -1;
     }).sort(function(a,b){
       if (!!a.runningSince !== !!b.runningSince) return a.runningSince ? -1 : 1;
@@ -491,9 +551,10 @@
   }
 
   function renderFilters(){
-    var counts = {all:tasks.length};
+    var scope = scopedTasks();
+    var counts = {all:scope.length};
     STATUSES.forEach(function(s){ counts[s.id] = 0; });
-    tasks.forEach(function(t){ counts[t.status] = (counts[t.status]||0) + 1; });
+    scope.forEach(function(t){ counts[t.status] = (counts[t.status]||0) + 1; });
 
     filtersEl.textContent = "";
     var mk = function(id, label, color){
@@ -521,6 +582,31 @@
       }
       filtersEl.appendChild(mk(s.id, s.label, s.varName));
     });
+
+    var names = clientNames();
+    var dl = $("clientList");
+    dl.textContent = "";
+    names.forEach(function(n){
+      var o = document.createElement("option");
+      o.value = n;
+      dl.appendChild(o);
+    });
+    if (names.length){
+      var cs = document.createElement("select");
+      cs.className = "clientfilter"; cs.id = "clientSelect";
+      cs.setAttribute("aria-label", "Filter by client");
+      [["all","All clients"]].concat(names.map(function(n){ return [n,n]; })).forEach(function(pair){
+        var o = document.createElement("option");
+        o.value = pair[0]; o.textContent = pair[1];
+        if (pair[0] === client) o.selected = true;
+        cs.appendChild(o);
+      });
+      if (client !== "all" && names.indexOf(client) === -1) client = "all";
+      cs.addEventListener("change", function(){ client = cs.value; savePrefs(); render(); });
+      filtersEl.appendChild(cs);
+    } else if (client !== "all"){
+      client = "all";
+    }
 
     var wrap = document.createElement("div");
     wrap.className = "search";
@@ -570,11 +656,14 @@
     disc.setAttribute("aria-expanded", openRows[t.id] ? "true" : "false");
     disc.setAttribute("aria-label", "Details for " + t.title);
     disc.textContent = openRows[t.id] ? "▾" : "▸";
-    top.appendChild(disc);
+    var titlerow = document.createElement("div");
+    titlerow.className = "titlerow";
+    titlerow.appendChild(disc);
     var h3 = document.createElement("h3");
     h3.className = "t-title" + (t.status === "merged" ? " done" : "");
     h3.textContent = t.title;
-    top.appendChild(h3);
+    titlerow.appendChild(h3);
+    top.appendChild(titlerow);
     if (t.example){
       var ex = document.createElement("span");
       ex.className = "tag"; ex.textContent = "Example";
@@ -600,8 +689,25 @@
     });
     sel.disabled = !canWrite;
     meta.appendChild(sel);
+    if (t.client){
+      var cl = document.createElement("span");
+      cl.className = "client"; cl.textContent = t.client;
+      meta.appendChild(cl);
+    }
     if (t.issue) meta.appendChild(ghChip(t.issue, "issue"));
     if (t.pr) meta.appendChild(ghChip(t.pr, "pr"));
+    if (t.runningSince && Date.now() - t.runningSince > RUNAWAY_MS){
+      var w = document.createElement("span");
+      w.className = "warn";
+      w.textContent = "running " + clock(Date.now() - t.runningSince).split(":")[0] + "h+ — still going?";
+      meta.appendChild(w);
+    }
+    if (t.runningSince && t.runningBy && myId && t.runningBy !== myId){
+      var rb = document.createElement("span");
+      rb.className = "runby"; rb.dataset.runwho = t.runningBy;
+      rb.textContent = "a teammate is timing this";
+      meta.appendChild(rb);
+    }
     var who = document.createElement("span");
     who.className = "who";
     who.dataset.who = t.createdBy || "";
@@ -644,6 +750,10 @@
     var grid = document.createElement("div");
     grid.className = "grid";
 
+    var tt = fieldInput("Task", "title", t.title, t.id);
+    tt.className = "field wide";
+    grid.appendChild(tt);
+    grid.appendChild(fieldInput("Client", "client", t.client || "", t.id, "text", "unassigned"));
     grid.appendChild(fieldInput("Issue (URL or owner/repo#123)", "issue", t.issue ? t.issue.url : "", t.id));
     grid.appendChild(fieldInput("Pull request", "pr", t.pr ? t.pr.url : "", t.id));
     grid.appendChild(fieldInput("Hourly rate for this task", "rate", t.rate === null ? "" : String(t.rate), t.id, "number", "default " + rateLabel(Number(settings.defaultRate))));
@@ -750,6 +860,14 @@
         s.textContent = "No tasks on the log yet";
         emptyEl.appendChild(s);
         emptyEl.appendChild(document.createTextNode("Add the first one — an issue link, a rate, then hit start when you begin."));
+        if (canWrite){
+          var cta = document.createElement("button");
+          cta.type = "button"; cta.className = "btn primary";
+          cta.textContent = "Add a task";
+          cta.addEventListener("click", function(){ openForm(); });
+          emptyEl.appendChild(document.createElement("br"));
+          emptyEl.appendChild(cta);
+        }
       } else {
         s.textContent = "Nothing matches";
         emptyEl.appendChild(s);
@@ -764,13 +882,15 @@
   }
 
   function render(){
+    renderBanner();
     renderFilters();
     renderList();
     renderStats();
   }
 
   function renderStats(){
-    var running = tasks.filter(function(t){ return !!t.runningSince; });
+    var scope = scopedTasks();
+    var running = scope.filter(function(t){ return !!t.runningSince; });
     var runningMs = running.reduce(function(a,t){ return a + (Date.now() - t.runningSince); }, 0);
     $("statRunning").textContent = clock(runningMs);
     $("statRunningNote").textContent = running.length
@@ -778,7 +898,7 @@
       : "nothing running";
 
     var since = Date.now() - 7*24*3600*1000, weekMs = 0, weekAmount = 0;
-    tasks.forEach(function(t){
+    scope.forEach(function(t){
       var ms = 0;
       (t.sessions||[]).forEach(function(s){ if ((s.end||s.start) >= since) ms += (s.ms||0); });
       if (t.runningSince) ms += Date.now() - Math.max(t.runningSince, since);
@@ -788,13 +908,15 @@
     $("statWeek").textContent = hours(weekMs).toFixed(2) + " h";
     $("statWeekNote").textContent = money(weekAmount) + " earned";
 
-    var unbilled = tasks.filter(function(t){ return !t.billed; }).reduce(function(a,t){ return a + amountOf(t); }, 0);
+    var unbilled = scope.filter(function(t){ return !t.billed; }).reduce(function(a,t){ return a + amountOf(t); }, 0);
     $("statUnbilled").textContent = money(unbilled);
-    var billedTotal = tasks.filter(function(t){ return t.billed; }).reduce(function(a,t){ return a + amountOf(t); }, 0);
-    $("statUnbilledNote").textContent = billedTotal ? money(billedTotal) + " already invoiced" : "not yet invoiced";
+    var billedTotal = scope.filter(function(t){ return t.billed; }).reduce(function(a,t){ return a + amountOf(t); }, 0);
+    $("statUnbilledNote").textContent = client !== "all"
+      ? "for " + client
+      : (billedTotal ? money(billedTotal) + " already invoiced" : "not yet invoiced");
 
-    var open = tasks.filter(function(t){ return t.status !== "merged"; }).length;
-    var blocked = tasks.filter(function(t){ return t.status === "blocked"; }).length;
+    var open = scope.filter(function(t){ return t.status !== "merged"; }).length;
+    var blocked = scope.filter(function(t){ return t.status === "blocked"; }).length;
     $("statOpen").textContent = String(open);
     $("statOpenNote").textContent = blocked ? blocked + " blocked" : "tasks not merged";
 
@@ -898,6 +1020,8 @@
       Array.prototype.forEach.call(detail.querySelectorAll('[data-act="edit"]'), function(inp){
         var key = inp.dataset.key, v = inp.value.trim();
         if (key === "rate"){ patch.rate = v === "" ? null : Number(v); }
+        else if (key === "title"){ if (v) patch.title = v; }
+        else if (key === "client"){ patch.client = v; }
         else if (key === "issue"){ patch.issue = parseRef(v, "issue"); }
         else if (key === "pr"){ patch.pr = parseRef(v, "pr"); }
       });
@@ -930,6 +1054,7 @@
     var b = ev.target.closest("[data-filter]");
     if (!b) return;
     filter = b.dataset.filter;
+    savePrefs();
     render();
   });
 
@@ -945,6 +1070,7 @@
   function openForm(){
     form.hidden = false;
     $("f-rate").value = settings.defaultRate;
+    if (client !== "all" && !$("f-client").value) $("f-client").value = client;
     $("f-title").focus();
   }
   $("newBtn").addEventListener("click", function(){
@@ -962,6 +1088,7 @@
       title: title,
       status: statusSel.value,
       notes: $("f-notes").value.trim(),
+      client: $("f-client").value.trim(),
       rate: rateRaw === "" ? null : Number(rateRaw),
       accruedMs: 0,
       runningSince: null,
@@ -1017,10 +1144,11 @@
     return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v;
   }
   $("exportBtn").addEventListener("click", function(){
-    var rows = [["Task","Status","Repo","Issue","Pull request","Hours","Rate","Amount","Invoiced","Notes"]];
+    var rows = [["Task","Client","Status","Repo","Issue","Pull request","Hours","Rate","Amount","Invoiced","Last worked","Notes"]];
     visibleTasks().forEach(function(t){
       rows.push([
         t.title,
+        t.client || "",
         statusById[t.status].label,
         (t.issue && t.issue.repo) || (t.pr && t.pr.repo) || "",
         (t.issue && t.issue.url) || "",
@@ -1029,24 +1157,44 @@
         rateOf(t).toFixed(2),
         amountOf(t).toFixed(2),
         t.billed ? "yes" : "no",
+        t.updatedAt ? new Date(t.updatedAt).toISOString().slice(0,10) : "",
         t.notes || ""
       ]);
     });
     var csv = rows.map(function(r){ return r.map(csvCell).join(","); }).join("\n");
-    var name = "timesheet-" + new Date().toISOString().slice(0,10) + ".csv";
+    var name = "timesheet-" + (client === "all" ? "" : client.toLowerCase().replace(/[^a-z0-9]+/g,"-") + "-") +
+      new Date().toISOString().slice(0,10) + ".csv";
     claude.use("downloads").then(function(dl){
       if (!dl){ toast("Downloads are not available in this view."); return; }
       return dl.save({filename:name, data:csv}).then(function(){ toast("Timesheet saved."); });
     }).catch(function(){ toast("Export was cancelled."); });
   });
 
+  /* ---------- keyboard ---------- */
+  document.addEventListener("keydown", function(ev){
+    if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    var tag = (document.activeElement && document.activeElement.tagName) || "";
+    var typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    if (ev.key === "Escape" && !form.hidden){
+      form.hidden = true; form.reset();
+      if (typing) document.activeElement.blur();
+      return;
+    }
+    if (typing) return;
+    if ((ev.key === "n" || ev.key === "N") && canWrite && form.hidden){
+      ev.preventDefault();
+      openForm();
+    }
+  });
+
   /* ---------- boot ---------- */
+  loadPrefs();
   render();
   defRate.value = settings.defaultRate;
 
   if (typeof window.claude === "undefined" || !window.claude.use){
     localOnly = true;
-    banner("Running without the shared store — tasks you add stay in this browser only.");
+    banner("Running without the shared store — tasks you add stay in this browser only.", null, null, true);
     render();
   } else {
     claude.use("user").then(function(u){
@@ -1061,7 +1209,7 @@
     claude.use("db").then(function(d){
       if (!d){
         localOnly = true;
-        banner("Shared store unavailable here — tasks you add stay in this browser only.");
+        banner("Shared store unavailable here — tasks you add stay in this browser only.", null, null, true);
         render();
         return;
       }
@@ -1079,8 +1227,8 @@
         tasks = snap.docs.map(function(doc){ return normalize(doc.id, doc.data() || {}); });
         render();
       }, function(err){
-        if (err && err.code === "revoked") banner("Your access to this board changed — reload to continue.");
-        else banner("Live updates dropped. Reload to reconnect.");
+        if (err && err.code === "revoked") banner("Your access to this board changed — reload to continue.", null, null, true);
+        else banner("Live updates dropped. Reload to reconnect.", null, null, true);
       });
     }).catch(function(){
       localOnly = true; render();
