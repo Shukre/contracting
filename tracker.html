@@ -250,6 +250,50 @@
   .logrow button{border:1px solid var(--line-strong);background:var(--surface);border-radius:6px;padding:5px 11px;cursor:pointer;font-size:13px;font-weight:500}
   .logrow button:hover{background:var(--surface-2)}
 
+  /* ---------- statement ---------- */
+  .stmt{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
+  .stmt-head{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:6px}
+  .stmt-head h2{font-family:var(--display);font-size:20px;margin:0;letter-spacing:-.02em}
+  .stmt-head .meta{font-size:13px;color:var(--muted);margin-top:3px}
+  .stmt-head .scope{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+  .stmt-head .scope input{width:auto}
+  .stmt-group{margin-top:22px}
+  .stmt-group h3{font-family:var(--display);font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;font-weight:700}
+  .stmt-scroll{overflow-x:auto}
+  table.stmt-table{border-collapse:collapse;width:100%;min-width:480px;font-size:14px}
+  table.stmt-table th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:0 0 6px;border-bottom:1px solid var(--line)}
+  table.stmt-table th.num,table.stmt-table td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+  table.stmt-table td{padding:9px 0;border-bottom:1px solid var(--line);vertical-align:top}
+  table.stmt-table td.num{padding-left:18px}
+  table.stmt-table .line{font-weight:500}
+  table.stmt-table .refs{display:flex;gap:8px;flex-wrap:wrap;margin-top:3px}
+  table.stmt-table .refs a{font-family:var(--mono);font-size:12px;color:var(--ink-2);text-decoration:none;border-bottom:1px dotted var(--line-strong)}
+  table.stmt-table .refs a:hover{color:var(--ink)}
+  table.stmt-table .note{font-size:12px;color:var(--muted);margin-top:3px;max-width:60ch}
+  table.stmt-table tr.sub td{border-bottom:none;padding-top:10px;font-weight:600}
+  .stmt-total{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-top:26px;padding-top:16px;border-top:2px solid var(--ink)}
+  .stmt-total .lbl{font-family:var(--display);font-size:15px;font-weight:600}
+  .stmt-total .amt{font-family:var(--mono);font-size:28px;font-weight:500;letter-spacing:-.03em;margin-left:auto}
+  .stmt-total .sum{font-size:13px;color:var(--muted)}
+  .stmt-foot{font-size:12px;color:var(--muted);margin-top:14px}
+  @media (max-width:560px){
+    table.stmt-table{min-width:0}
+    table.stmt-table thead{display:none}
+    table.stmt-table tbody tr{display:block;padding:10px 0;border-bottom:1px solid var(--line)}
+    table.stmt-table td{display:block;border:none;padding:0}
+    table.stmt-table td.num{display:inline-block;text-align:left;padding:6px 16px 0 0}
+    table.stmt-table td.num::before{
+      content:attr(data-label);display:block;font-family:var(--body);font-size:10px;
+      letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;
+    }
+    table.stmt-table tr.sub{border-bottom:none}
+  }
+  @media print{
+    .bar,.filters,.banner,#addForm,.foot{display:none!important}
+    body{background:#fff}
+    .stmt{border:none;box-shadow:none;padding:0}
+  }
+
   .empty{
     text-align:center;color:var(--muted);border:1px dashed var(--line-strong);border-radius:var(--radius);
     padding:40px 20px;background:var(--surface);
@@ -276,6 +320,7 @@
     </div>
     <div class="bar-actions">
       <span class="onclock" id="onclock" hidden><span class="dot"></span><span id="onclockText">—</span></span>
+      <button class="btn quiet" id="stmtBtn" type="button">Statement</button>
       <button class="btn quiet" id="exportBtn" type="button">Export CSV</button>
       <button class="btn primary" id="newBtn" type="button">New task</button>
     </div>
@@ -347,6 +392,7 @@
   <datalist id="clientList"></datalist>
   <nav class="filters" id="filters" aria-label="Filter by status"></nav>
 
+  <section class="stmt" id="statement" hidden></section>
   <div class="list" id="list"></div>
   <div class="empty" id="empty" hidden></div>
 
@@ -933,6 +979,7 @@
     } else {
       emptyEl.hidden = true;
     }
+    if (stmtOpen) emptyEl.hidden = true;
     renderFooterTotals();
     resolveNames();
   }
@@ -951,6 +998,7 @@
     renderFilters();
     renderList();
     renderStats();
+    renderStatement();
   }
 
   function renderStats(){
@@ -1006,6 +1054,7 @@
     });
     renderStats();
     renderFooterTotals();
+    if (stmtOpen) renderStatement();
   }
   setInterval(tick, 1000);
 
@@ -1259,6 +1308,175 @@
       });
     }).catch(function(){ toast("Export was cancelled."); });
   });
+
+  /* ---------- statement ---------- */
+  var stmtOpen = false, stmtUnbilledOnly = true;
+
+  function statementRows(){
+    return scopedTasks()
+      .filter(function(t){ return elapsedOf(t) > 0 && (!stmtUnbilledOnly || !t.billed); })
+      .sort(function(a,b){ return (a.createdAt||0) - (b.createdAt||0); });
+  }
+
+  function renderStatement(){
+    var el = $("statement");
+    if (!stmtOpen){ el.hidden = true; return; }
+    el.hidden = false;
+    el.textContent = "";
+
+    var rows = statementRows();
+    var head = document.createElement("div");
+    head.className = "stmt-head";
+    var left = document.createElement("div");
+    var h2 = document.createElement("h2");
+    h2.textContent = client === "all" ? "Statement of work" : client;
+    left.appendChild(h2);
+    var meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = "As of " + new Date().toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"}) +
+      (stmtUnbilledOnly ? " · work not yet invoiced" : " · all tracked work");
+    left.appendChild(meta);
+    head.appendChild(left);
+
+    var scope = document.createElement("label");
+    scope.className = "scope";
+    var cb = document.createElement("input");
+    cb.type = "checkbox"; cb.id = "stmtUnbilled"; cb.checked = stmtUnbilledOnly;
+    cb.addEventListener("change", function(){ stmtUnbilledOnly = cb.checked; renderStatement(); });
+    scope.appendChild(cb);
+    scope.appendChild(document.createTextNode("Unbilled only"));
+    head.appendChild(scope);
+    el.appendChild(head);
+
+    if (!rows.length){
+      var none = document.createElement("p");
+      none.className = "stmt-foot";
+      none.textContent = stmtUnbilledOnly
+        ? "Nothing outstanding — every task with time on it has been marked invoiced."
+        : "No time has been tracked yet.";
+      el.appendChild(none);
+      return;
+    }
+
+    var groups = {}, order = [];
+    rows.forEach(function(t){
+      var key = t.client || "Unassigned";
+      if (!groups[key]){ groups[key] = []; order.push(key); }
+      groups[key].push(t);
+    });
+    order.sort(function(a,b){ return a.localeCompare(b); });
+
+    var grandMs = 0, grandAmt = 0;
+    order.forEach(function(key){
+      var g = document.createElement("div");
+      g.className = "stmt-group";
+      if (order.length > 1 || key !== "Unassigned"){
+        var h3 = document.createElement("h3");
+        h3.textContent = key;
+        g.appendChild(h3);
+      }
+      var scroll = document.createElement("div");
+      scroll.className = "stmt-scroll";
+      var table = document.createElement("table");
+      table.className = "stmt-table";
+      var thead = document.createElement("thead");
+      var hr = document.createElement("tr");
+      [["Work",""],["Hours","num"],["Rate","num"],["Amount","num"]].forEach(function(c){
+        var th = document.createElement("th");
+        th.textContent = c[0]; if (c[1]) th.className = c[1];
+        hr.appendChild(th);
+      });
+      thead.appendChild(hr); table.appendChild(thead);
+
+      var tbody = document.createElement("tbody");
+      var subMs = 0, subAmt = 0;
+      groups[key].forEach(function(t){
+        var ms = elapsedOf(t), amt = amountOf(t);
+        subMs += ms; subAmt += amt;
+        var tr = document.createElement("tr");
+        var td = document.createElement("td");
+        var line = document.createElement("div");
+        line.className = "line"; line.textContent = t.title;
+        td.appendChild(line);
+        if (t.issue || t.pr){
+          var refs = document.createElement("div");
+          refs.className = "refs";
+          [[t.issue,"issue"],[t.pr,"pr"]].forEach(function(pair){
+            if (!pair[0]) return;
+            var a = document.createElement("a");
+            a.href = pair[0].url; a.target = "_blank"; a.rel = "noopener noreferrer";
+            a.textContent = (pair[1] === "pr" ? "PR " : "Issue ") + (pair[0].repo ? pair[0].repo + " " : "") + refLabel(pair[0], pair[1]);
+            refs.appendChild(a);
+          });
+          td.appendChild(refs);
+        }
+        if (t.notes){
+          var n = document.createElement("div");
+          n.className = "note"; n.textContent = t.notes;
+          td.appendChild(n);
+        }
+        tr.appendChild(td);
+        [["Hours", hours(ms).toFixed(2)], ["Rate", rateLabel(rateOf(t))], ["Amount", money(amt)]].forEach(function(pair){
+          var c = document.createElement("td");
+          c.className = "num"; c.textContent = pair[1];
+          c.dataset.label = pair[0];
+          tr.appendChild(c);
+        });
+        tbody.appendChild(tr);
+      });
+
+      var sub = document.createElement("tr");
+      sub.className = "sub";
+      var sl = document.createElement("td");
+      sl.textContent = groups[key].length + (groups[key].length === 1 ? " task" : " tasks");
+      sub.appendChild(sl);
+      [["Hours", hours(subMs).toFixed(2)], ["", ""], ["Subtotal", money(subAmt)]].forEach(function(pair){
+        var c = document.createElement("td");
+        c.className = "num"; c.textContent = pair[1];
+        if (pair[0]) c.dataset.label = pair[0];
+        sub.appendChild(c);
+      });
+      if (order.length > 1) tbody.appendChild(sub);
+      table.appendChild(tbody);
+      scroll.appendChild(table);
+      g.appendChild(scroll);
+      el.appendChild(g);
+      grandMs += subMs; grandAmt += subAmt;
+    });
+
+    var total = document.createElement("div");
+    total.className = "stmt-total";
+    var lbl = document.createElement("span");
+    lbl.className = "lbl";
+    lbl.textContent = stmtUnbilledOnly ? "Total due" : "Total tracked";
+    total.appendChild(lbl);
+    var sum = document.createElement("span");
+    sum.className = "sum";
+    sum.textContent = hours(grandMs).toFixed(2) + " hours across " + rows.length + (rows.length === 1 ? " task" : " tasks");
+    total.appendChild(sum);
+    var amt = document.createElement("span");
+    amt.className = "amt";
+    amt.textContent = money(grandAmt);
+    total.appendChild(amt);
+    el.appendChild(total);
+
+    var running = rows.filter(function(t){ return !!t.runningSince; }).length;
+    var foot = document.createElement("p");
+    foot.className = "stmt-foot";
+    foot.textContent = running
+      ? running + (running === 1 ? " timer is" : " timers are") + " still running, so these figures are still climbing."
+      : "Figures come from tracked time, rounded to the nearest second.";
+    el.appendChild(foot);
+  }
+
+  function setStatement(open){
+    stmtOpen = open;
+    $("stmtBtn").textContent = open ? "Back to tasks" : "Statement";
+    listEl.hidden = open;
+    if (open){ emptyEl.hidden = true; if (!form.hidden) form.hidden = true; }
+    render();
+  }
+  $("stmtBtn").addEventListener("click", function(){ setStatement(!stmtOpen); });
 
   /* ---------- keyboard ---------- */
   document.addEventListener("keydown", function(ev){
