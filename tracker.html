@@ -173,7 +173,18 @@
   @media (max-width:640px){.grid{grid-template-columns:1fr}}
 
   /* ---------- task rows ---------- */
-  .list{display:flex;flex-direction:column;gap:8px}
+  .list{display:flex;flex-direction:column;gap:26px}
+  .section{display:flex;flex-direction:column;gap:8px}
+  .sec-head{
+    display:flex;align-items:baseline;gap:9px;width:100%;text-align:left;
+    background:none;border:none;padding:0 2px 2px;border-bottom:1px solid var(--line);
+  }
+  button.sec-head{cursor:pointer}
+  button.sec-head:hover .sec-name{color:var(--ink)}
+  .sec-name{font-family:var(--display);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .sec-caret{font-size:10px;color:var(--muted);line-height:1}
+  .sec-meta{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .sec-body{display:flex;flex-direction:column;gap:8px}
   .task{
     display:grid;grid-template-columns:4px minmax(0,1fr) auto auto;align-items:center;gap:14px;
     background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
@@ -446,6 +457,7 @@
   var client = "all";
   var search = "";
   var bannerLocked = false;
+  var doneCollapsed = false;
   var RUNAWAY_MS = 4*3600*1000;
   var openRows = {};
   var profiles = {};
@@ -459,10 +471,11 @@
       var p = JSON.parse(localStorage.getItem("billable.view") || "{}");
       if (typeof p.filter === "string") filter = p.filter;
       if (typeof p.client === "string") client = p.client;
+      if (typeof p.doneCollapsed === "boolean") doneCollapsed = p.doneCollapsed;
     } catch(e){}
   }
   function savePrefs(){
-    try { localStorage.setItem("billable.view", JSON.stringify({filter:filter, client:client})); } catch(e){}
+    try { localStorage.setItem("billable.view", JSON.stringify({filter:filter, client:client, doneCollapsed:doneCollapsed})); } catch(e){}
   }
   var listEl = $("list"), emptyEl = $("empty"), filtersEl = $("filters");
 
@@ -1010,10 +1023,55 @@
     return f;
   }
 
+  function section(name, rows, collapsible, collapsed, onToggle){
+    var sec = document.createElement("div");
+    sec.className = "section";
+
+    var head = document.createElement(collapsible ? "button" : "div");
+    head.className = "sec-head";
+    if (collapsible){
+      head.type = "button";
+      head.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      var caret = document.createElement("span");
+      caret.className = "sec-caret";
+      caret.textContent = collapsed ? "\u25b8" : "\u25be";
+      head.appendChild(caret);
+      head.addEventListener("click", onToggle);
+    }
+    var nm = document.createElement("span");
+    nm.className = "sec-name"; nm.textContent = name;
+    head.appendChild(nm);
+    var meta = document.createElement("span");
+    meta.className = "sec-meta";
+    var ms = rows.reduce(function(a,t){ return a + elapsedOf(t); }, 0);
+    var amt = rows.reduce(function(a,t){ return a + amountOf(t); }, 0);
+    meta.textContent = rows.length + (rows.length === 1 ? " task \u00b7 " : " tasks \u00b7 ") +
+      hours(ms).toFixed(2) + " h \u00b7 " + money(amt);
+    head.appendChild(meta);
+    sec.appendChild(head);
+
+    if (!collapsed){
+      var body = document.createElement("div");
+      body.className = "sec-body";
+      rows.forEach(function(t){ body.appendChild(taskRow(t)); });
+      sec.appendChild(body);
+    }
+    return sec;
+  }
+
   function renderList(){
     var vis = visibleTasks();
     listEl.textContent = "";
-    vis.forEach(function(t){ listEl.appendChild(taskRow(t)); });
+    var openTasks = vis.filter(function(t){ return !isDone(t.status); });
+    var doneTasks = vis.filter(function(t){ return isDone(t.status); });
+    if (openTasks.length) listEl.appendChild(section("Open work", openTasks, false, false, null));
+    if (doneTasks.length){
+      listEl.appendChild(section("Done", doneTasks, true, doneCollapsed, function(){
+        doneCollapsed = !doneCollapsed;
+        savePrefs();
+        renderList();
+      }));
+    }
     if (!vis.length){
       emptyEl.hidden = false;
       emptyEl.textContent = "";

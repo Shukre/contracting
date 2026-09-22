@@ -11,6 +11,9 @@ timer for billing, and links to its GitHub issue and pull request.
   with Blocked as a side state. Merged and Completed both count as finished:
   Merged for code that landed, Completed for work with no PR behind it. Filter
   chips across the top double as counts per stage.
+- **Two sections** — open work sits above Done (Merged and Completed), each
+  with its own task count, hours and amount. Done collapses, and stays
+  collapsed for that browser.
 - **Billable timer per task** — start/stop from the row; elapsed time and the
   running amount update every second. Starting a timer stops the one you already
   had running, so two tasks never bill the same minute.
