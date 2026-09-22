@@ -18,6 +18,7 @@
     --st-pr:#6f52c8;
     --st-blocked:#c4402f;
     --st-merged:#188554;
+    --st-completed:#516073;
     --shadow:0 1px 2px rgba(20,24,32,.06), 0 8px 24px -16px rgba(20,24,32,.35);
     --radius:10px;
     --display:"Familjen Grotesk","Public Sans",system-ui,sans-serif;
@@ -40,6 +41,8 @@
       --st-pr:#a891ee;
       --st-blocked:#ef7a68;
       --st-merged:#42c68c;
+    --st-completed:#9fadc0;
+      --st-completed:#9fadc0;
       --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -20px rgba(0,0,0,.9);
     }
   }
@@ -165,6 +168,8 @@
   textarea{resize:vertical;min-height:62px}
   input::placeholder,textarea::placeholder{color:color-mix(in srgb,var(--muted) 80%,transparent)}
   .form-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+  .field.check span{display:flex;align-items:center;gap:8px;min-height:36px}
+  .field.check input{width:auto;flex:none}
   @media (max-width:640px){.grid{grid-template-columns:1fr}}
 
   /* ---------- task rows ---------- */
@@ -203,6 +208,7 @@
   select.status[data-status=pushed_pr]{color:var(--st-pr)}
   select.status[data-status=blocked]{color:var(--st-blocked)}
   select.status[data-status=merged]{color:var(--st-merged)}
+  select.status[data-status=completed]{color:var(--st-completed)}
   select.status option{color:var(--ink);background:var(--surface)}
 
   .t-time{text-align:right;padding:13px 0;white-space:nowrap}
@@ -361,7 +367,7 @@
         <input type="text" id="f-title" name="title" placeholder="Fix flaky auth redirect on session expiry" required>
       </div>
       <div class="field">
-        <label for="f-issue">GitHub issue <span class="hint">— URL or owner/repo#123</span></label>
+        <label for="f-issue">GitHub issue <span class="hint">— optional; URL or owner/repo#123</span></label>
         <input type="text" id="f-issue" name="issue" placeholder="https://github.com/owner/repo/issues/42">
       </div>
       <div class="field">
@@ -379,6 +385,14 @@
       <div class="field">
         <label for="f-rate">Hourly rate</label>
         <input type="number" id="f-rate" name="rate" min="0" step="1" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label for="f-hours">Hours already worked <span class="hint">— optional; 48, 1:30 or 90m</span></label>
+        <input type="text" id="f-hours" name="hours" placeholder="48">
+      </div>
+      <div class="field check">
+        <label for="f-billed">Already paid</label>
+        <span><input type="checkbox" id="f-billed" name="billed"> <span class="hint">Marks it invoiced, so it stays out of the amount owed</span></span>
       </div>
       <div class="field wide">
         <label for="f-notes">Notes <span class="hint">— what the client should see on the invoice line</span></label>
@@ -416,8 +430,11 @@
     {id:"in_development", label:"In development", varName:"--st-dev"},
     {id:"pushed_pr",      label:"Pushed PR",      varName:"--st-pr"},
     {id:"blocked",        label:"Blocked",        varName:"--st-blocked"},
-    {id:"merged",         label:"Merged",         varName:"--st-merged"}
+    {id:"merged",         label:"Merged",         varName:"--st-merged"},
+    {id:"completed",      label:"Completed",      varName:"--st-completed"}
   ];
+  var DONE = {merged:1, completed:1};
+  function isDone(status){ return !!DONE[status]; }
   var statusById = {};
   STATUSES.forEach(function(s){ statusById[s.id] = s; });
 
@@ -655,7 +672,7 @@
       return hay.indexOf(q) !== -1;
     }).sort(function(a,b){
       if (!!a.runningSince !== !!b.runningSince) return a.runningSince ? -1 : 1;
-      var am = a.status === "merged", bm = b.status === "merged";
+      var am = isDone(a.status), bm = isDone(b.status);
       if (am !== bm) return am ? 1 : -1;
       return (b.updatedAt||0) - (a.updatedAt||0);
     });
@@ -771,7 +788,7 @@
     titlerow.className = "titlerow";
     titlerow.appendChild(disc);
     var h3 = document.createElement("h3");
-    h3.className = "t-title" + (t.status === "merged" ? " done" : "");
+    h3.className = "t-title" + (isDone(t.status) ? " done" : "");
     h3.textContent = t.title;
     titlerow.appendChild(h3);
     top.appendChild(titlerow);
@@ -1063,10 +1080,10 @@
       ? "for " + client
       : (billedTotal ? money(billedTotal) + " already invoiced" : "not yet invoiced");
 
-    var open = scope.filter(function(t){ return t.status !== "merged"; }).length;
+    var open = scope.filter(function(t){ return !isDone(t.status); }).length;
     var blocked = scope.filter(function(t){ return t.status === "blocked"; }).length;
     $("statOpen").textContent = String(open);
-    $("statOpenNote").textContent = blocked ? blocked + " blocked" : "tasks not merged";
+    $("statOpenNote").textContent = blocked ? blocked + " blocked" : "tasks still open";
 
     var chip = $("onclock");
     if (running.length){
@@ -1209,13 +1226,13 @@
     var t = byId(row.dataset.id);
     if (!t) return;
     var patch = {status: sel.value};
-    if (sel.value === "merged" && t.runningSince){
+    if (isDone(sel.value) && t.runningSince){
       var now = Date.now();
       patch.accruedMs = (t.accruedMs||0) + (now - t.runningSince);
       patch.runningSince = null;
       patch.runningBy = null;
       patch.sessions = (t.sessions||[]).concat([{start:t.runningSince,end:now,ms:now-t.runningSince,by:myId||null}]).slice(-60);
-      toast("Merged — timer stopped.");
+      toast(statusById[sel.value].label + " — timer stopped.");
     }
     writeTask(t.id, patch);
   });
@@ -1253,6 +1270,8 @@
     var title = $("f-title").value.trim();
     if (!title) return;
     var rateRaw = $("f-rate").value.trim();
+    var hoursMs = parseDuration($("f-hours").value);
+    if (hoursMs === null){ toast("Give the hours as 48, 1:30 or 90m."); $("f-hours").focus(); return; }
     var now = Date.now();
     var doc = {
       title: title,
@@ -1260,12 +1279,12 @@
       notes: $("f-notes").value.trim(),
       client: $("f-client").value.trim(),
       rate: rateRaw === "" ? null : Number(rateRaw),
-      accruedMs: 0,
+      accruedMs: hoursMs || 0,
       runningSince: null,
       runningBy: null,
       issue: parseRef($("f-issue").value, "issue"),
       pr: parseRef($("f-pr").value, "pr"),
-      billed: false,
+      billed: $("f-billed").checked,
       createdBy: myId,
       createdAt: now,
       updatedAt: now,

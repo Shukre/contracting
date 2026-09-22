@@ -7,8 +7,10 @@ timer for billing, and links to its GitHub issue and pull request.
 
 ## What it does
 
-- **Statuses as a pipeline** — In development → Pushed PR → Merged, with Blocked
-  as a side state. Filter chips across the top double as counts per stage.
+- **Statuses as a pipeline** — In development → Pushed PR → Merged → Completed,
+  with Blocked as a side state. Merged and Completed both count as finished:
+  Merged for code that landed, Completed for work with no PR behind it. Filter
+  chips across the top double as counts per stage.
 - **Billable timer per task** — start/stop from the row; elapsed time and the
   running amount update every second. Starting a timer stops the one you already
   had running, so two tasks never bill the same minute.
@@ -29,6 +31,10 @@ timer for billing, and links to its GitHub issue and pull request.
 - **Clients** — tag a task with a client, filter the board to one, and every
   total (tracked, unbilled, open) follows that filter. The CSV export is scoped
   to it too and names the file after it.
+- **Entering work after the fact** — the new-task form takes hours already
+  worked (`48`, `1:30`, `90m`), a status, and an "already paid" tick, so a piece
+  of finished work goes on the board in one step. Only the title is required;
+  the issue and PR are both optional.
 - **Runaway timer warning** — a timer running longer than four hours flags
   itself on the row, so an overnight timer doesn't quietly become nine
   billable hours.
