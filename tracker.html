@@ -265,6 +265,8 @@
   .logrow input{width:auto;flex:0 1 auto;font-size:13px;padding:5px 8px}
   .logrow input.dur{width:110px;font-family:var(--mono)}
   .logrow input.day{width:150px}
+  .logrow.total{margin-top:0;margin-bottom:10px}
+  .inline-lab{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
   .logrow button{border:1px solid var(--line-strong);background:var(--surface);border-radius:6px;padding:5px 11px;cursor:pointer;font-size:13px;font-weight:500}
   .logrow button:hover{background:var(--surface-2)}
 
@@ -534,6 +536,12 @@
   function basisShort(){
     var b = basisParts();
     return b ? rateLabel(b.monthly) + "/mo \u00f7 " + num(b.perMonth) + " h = " + rateLabel(b.rate) + "/h" : "";
+  }
+  /* The editable form of a total: hours and minutes, e.g. "48:00". */
+  function hhmm(ms){
+    ms = Math.max(0, ms||0);
+    var mins = Math.round(ms/60000);
+    return Math.floor(mins/60) + ":" + String(mins%60).padStart(2,"0");
   }
   function clock(ms){
     ms = Math.max(0, ms||0);
@@ -906,13 +914,29 @@
     grid.appendChild(fieldInput("Client", "client", t.client || "", t.id, "text", "unassigned"));
     grid.appendChild(fieldInput("Issue (URL or owner/repo#123)", "issue", t.issue ? t.issue.url : "", t.id));
     grid.appendChild(fieldInput("Pull request", "pr", t.pr ? t.pr.url : "", t.id));
-    grid.appendChild(fieldInput("Hourly rate for this task", "rate", t.rate === null ? "" : String(t.rate), t.id, "number", "default " + rateLabel(Number(settings.defaultRate))));
+    grid.appendChild(fieldInput("Hourly rate for this task", "rate", t.rate === null ? "" : String(Math.round(t.rate * 10000) / 10000), t.id, "number", "default " + rateLabel(Number(settings.defaultRate))));
 
     var tf = document.createElement("div");
     tf.className = "field";
     var tl = document.createElement("label");
     tl.textContent = "Logged time";
     tf.appendChild(tl);
+    var totalRow = document.createElement("div");
+    totalRow.className = "logrow total";
+    var tlab = document.createElement("span");
+    tlab.className = "inline-lab"; tlab.textContent = "Total";
+    var tin = document.createElement("input");
+    tin.type = "text"; tin.className = "dur"; tin.id = "total-" + t.id;
+    tin.dataset.act = "edit"; tin.dataset.key = "total";
+    tin.value = hhmm(elapsedOf(t));
+    tin.dataset.original = tin.value;
+    tin.disabled = !canWrite;
+    tin.setAttribute("aria-label", "Total time recorded");
+    var thint = document.createElement("span");
+    thint.className = "hint"; thint.textContent = "hours:minutes, or 12.5 / 90m \u2014 saved with the task";
+    totalRow.appendChild(tlab); totalRow.appendChild(tin); totalRow.appendChild(thint);
+    tf.appendChild(totalRow);
+
     var adj = document.createElement("div");
     adj.className = "adjust";
     [["-15m",-15],["-5m",-5],["+5m",5],["+15m",15],["+1h",60]].forEach(function(p){
@@ -1271,6 +1295,7 @@
     } else if (act === "save"){
       var detail = row.querySelector(".detail");
       var patch = {};
+      var bad = null;
       Array.prototype.forEach.call(detail.querySelectorAll('[data-act="edit"]'), function(inp){
         var key = inp.dataset.key, v = inp.value.trim();
         if (key === "rate"){ patch.rate = v === "" ? null : Number(v); }
@@ -1278,9 +1303,23 @@
         else if (key === "client"){ patch.client = v; }
         else if (key === "issue"){ patch.issue = parseRef(v, "issue"); }
         else if (key === "pr"){ patch.pr = parseRef(v, "pr"); }
+        else if (key === "total"){
+          if (v === inp.dataset.original) return;           // untouched: leave the seconds alone
+          var ms = parseDuration(v);
+          if (ms === null){ bad = inp; return; }
+          var delta = ms - elapsedOf(t);
+          patch.accruedMs = ms;
+          if (t.runningSince) patch.runningSince = Date.now();   // the new total counts on from here
+          if (delta){
+            var at = Date.now();
+            patch.sessions = (t.sessions||[]).concat([{start:at, end:at, ms:delta, manual:true, by:myId||null}]).slice(-60);
+          }
+        }
       });
+      if (bad){ toast("Give the total as 12:30, 12.5 or 90m."); bad.focus(); return; }
       var notes = detail.querySelector('[data-act="notes"]');
       if (notes) patch.notes = notes.value.trim();
+      openRows[t.id] = false;
       writeTask(t.id, patch);
       toast("Saved.");
     }
