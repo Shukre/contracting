@@ -14,6 +14,9 @@ timer for billing, and links to its GitHub issue and pull request.
 - **Two sections** — open work sits above Done (Merged and Completed), each
   with its own task count, hours and amount. Done collapses, and stays
   collapsed for that browser.
+- **Days on each row** — beside the amount, the same time as a decimal run of
+  8-hour days (12 hours reads `1.50 d`), from the working day the rate basis
+  defines. Totals elsewhere stay in hours.
 - **Billable timer per task** — start/stop from the row; elapsed time and the
   running amount update every second. Starting a timer stops the one you already
   had running, so two tasks never bill the same minute.

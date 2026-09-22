@@ -542,6 +542,13 @@
     return h + ":" + String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0");
   }
   function hours(ms){ return (Math.max(0, ms||0) / 3600000); }
+  /* A day is the working day the rate is built on — 8 hours, from a
+     40-hour week over five days. */
+  function hoursPerDay(){
+    var b = basisParts();
+    return (b && b.perDay) ? b.perDay : 8;
+  }
+  function days(ms){ return hours(ms) / hoursPerDay(); }
   function elapsedOf(t){
     var base = t.accruedMs || 0;
     if (t.runningSince) base += Date.now() - t.runningSince;
@@ -868,7 +875,7 @@
     time.appendChild(e);
     var m = document.createElement("div");
     m.className = "money"; m.dataset.money = t.id;
-    m.textContent = money(amountOf(t)) + " · " + rateLabel(rateOf(t)) + "/hr";
+    m.textContent = days(elapsedOf(t)).toFixed(2) + " d · " + money(amountOf(t)) + " · " + rateLabel(rateOf(t)) + "/hr";
     time.appendChild(m);
     el.appendChild(time);
 
@@ -1161,7 +1168,7 @@
       var e = listEl.querySelector('[data-elapsed="' + t.id + '"]');
       if (e) e.textContent = clock(elapsedOf(t));
       var m = listEl.querySelector('[data-money="' + t.id + '"]');
-      if (m) m.textContent = money(amountOf(t)) + " · " + rateLabel(rateOf(t)) + "/hr";
+      if (m) m.textContent = days(elapsedOf(t)).toFixed(2) + " d · " + money(amountOf(t)) + " · " + rateLabel(rateOf(t)) + "/hr";
     });
     renderStats();
     renderFooterTotals();
