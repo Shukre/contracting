@@ -31,9 +31,10 @@ timer for billing, and links to its GitHub issue and pull request.
   40-hour week $1,149.89. Tasks carrying their own rate keep it, so historical
   work is not restated when the default changes.
 - **Manual corrections** — a total you can type over (`45:30:17`, `12.5`, `90m`),
-  ±5m / ±15m / +1h adjustments, a backdated entry
-  ("Sep 11, 1:30") for work you did before you opened the board, and a per-task
-  log of every time entry. Durations parse as `1:30`, `1.5`, `90m` or `1h30`.
+  ±5m / ±15m / +1h adjustments, and a backdated entry
+  ("Sep 11, 1:30") for work you did before you opened the board. Durations parse
+  as `1:30:00`, `1:30`, `1.5`, `90m` or `1h30`. Entries are still recorded — the
+  7-day total reads them — they just are not listed in the editor.
 - **Clients** — tag a task with a client, filter the board to one, and every
   total (tracked, unbilled, open) follows that filter. The CSV export is scoped
   to it too and names the file after it.

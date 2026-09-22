@@ -252,10 +252,6 @@
   /* ---------- detail drawer ---------- */
   .detail{grid-column:2 / -1;border-top:1px solid var(--line);background:var(--surface-2);padding:14px}
   .detail .grid{gap:10px}
-  .sessions{margin-top:12px}
-  .sessions h4{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 6px;font-weight:600}
-  .sessions ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px;max-height:150px;overflow-y:auto}
-  .sessions li{display:flex;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:12px;color:var(--ink-2);border-bottom:1px dotted var(--line);padding-bottom:3px}
   .detail-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px}
   .detail-actions .spacer{margin-left:auto}
   .adjust{display:inline-flex;gap:4px;align-items:center;font-size:12px;color:var(--muted)}
@@ -558,10 +554,6 @@
   function amountOf(t){ return hours(elapsedOf(t)) * rateOf(t); }
   function dateShort(ms){
     try { return new Date(ms).toLocaleDateString(undefined,{month:"short",day:"numeric"}); }
-    catch(e){ return ""; }
-  }
-  function timeShort(ms){
-    try { return new Date(ms).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"}); }
     catch(e){ return ""; }
   }
   function toast(msg){
@@ -975,26 +967,6 @@
     nf.appendChild(ta);
     grid.appendChild(nf);
     d.appendChild(grid);
-
-    if (t.sessions && t.sessions.length){
-      var s = document.createElement("div");
-      s.className = "sessions";
-      var h = document.createElement("h4");
-      h.textContent = "Time entries";
-      s.appendChild(h);
-      var ol = document.createElement("ol");
-      t.sessions.slice().reverse().forEach(function(se){
-        var li = document.createElement("li");
-        var left = document.createElement("span");
-        left.textContent = dateShort(se.start) + "  " + (se.logged ? "logged by hand" : (se.manual ? "adjustment" : timeShort(se.start) + "–" + timeShort(se.end)));
-        var right = document.createElement("span");
-        right.textContent = (se.ms < 0 ? "−" : "") + clock(Math.abs(se.ms));
-        li.appendChild(left); li.appendChild(right);
-        ol.appendChild(li);
-      });
-      s.appendChild(ol);
-      d.appendChild(s);
-    }
 
     var acts = document.createElement("div");
     acts.className = "detail-actions";
