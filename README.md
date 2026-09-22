@@ -30,7 +30,7 @@ timer for billing, and links to its GitHub issue and pull request.
   $5,000 a month ÷ 173.93 hours = $28.75 an hour, an 8-hour day $229.98, a
   40-hour week $1,149.89. Tasks carrying their own rate keep it, so historical
   work is not restated when the default changes.
-- **Manual corrections** — a total you can type over (`45:30`, `12.5`, `90m`),
+- **Manual corrections** — a total you can type over (`45:30:17`, `12.5`, `90m`),
   ±5m / ±15m / +1h adjustments, a backdated entry
   ("Sep 11, 1:30") for work you did before you opened the board, and a per-task
   log of every time entry. Durations parse as `1:30`, `1.5`, `90m` or `1h30`.

@@ -263,7 +263,7 @@
   .adjust button:hover{background:var(--surface-2)}
   .logrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}
   .logrow input{width:auto;flex:0 1 auto;font-size:13px;padding:5px 8px}
-  .logrow input.dur{width:110px;font-family:var(--mono)}
+  .logrow input.dur{width:124px;font-family:var(--mono)}
   .logrow input.day{width:150px}
   .logrow.total{margin-top:0;margin-bottom:10px}
   .inline-lab{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
@@ -494,7 +494,9 @@
   function parseDuration(raw){
     raw = (raw||"").trim().toLowerCase();
     if (!raw) return 0;
-    var m = raw.match(/^(\d+):([0-5]?\d)$/);
+    var m = raw.match(/^(\d+):([0-5]?\d):([0-5]?\d)$/);
+    if (m) return ((Number(m[1])*60 + Number(m[2])) * 60 + Number(m[3])) * 1000;
+    m = raw.match(/^(\d+):([0-5]?\d)$/);
     if (m) return (Number(m[1])*60 + Number(m[2])) * 60000;
     m = raw.match(/^(\d+(?:\.\d+)?)\s*h(?:ours?)?\s*(\d+)?\s*m?$/);
     if (m) return (Number(m[1])*60 + Number(m[2]||0)) * 60000;
@@ -536,12 +538,6 @@
   function basisShort(){
     var b = basisParts();
     return b ? rateLabel(b.monthly) + "/mo \u00f7 " + num(b.perMonth) + " h = " + rateLabel(b.rate) + "/h" : "";
-  }
-  /* The editable form of a total: hours and minutes, e.g. "48:00". */
-  function hhmm(ms){
-    ms = Math.max(0, ms||0);
-    var mins = Math.round(ms/60000);
-    return Math.floor(mins/60) + ":" + String(mins%60).padStart(2,"0");
   }
   function clock(ms){
     ms = Math.max(0, ms||0);
@@ -928,12 +924,12 @@
     var tin = document.createElement("input");
     tin.type = "text"; tin.className = "dur"; tin.id = "total-" + t.id;
     tin.dataset.act = "edit"; tin.dataset.key = "total";
-    tin.value = hhmm(elapsedOf(t));
+    tin.value = clock(elapsedOf(t));
     tin.dataset.original = tin.value;
     tin.disabled = !canWrite;
-    tin.setAttribute("aria-label", "Total time recorded");
+    tin.setAttribute("aria-label", "Total time recorded, hours minutes seconds");
     var thint = document.createElement("span");
-    thint.className = "hint"; thint.textContent = "hours:minutes, or 12.5 / 90m \u2014 saved with the task";
+    thint.className = "hint"; thint.textContent = "hours:minutes:seconds, or 12.5 / 90m \u2014 saved with the task";
     totalRow.appendChild(tlab); totalRow.appendChild(tin); totalRow.appendChild(thint);
     tf.appendChild(totalRow);
 
@@ -955,7 +951,7 @@
     day.setAttribute("aria-label", "Date of the work");
     var dur = document.createElement("input");
     dur.type = "text"; dur.className = "dur"; dur.dataset.role = "logdur";
-    dur.placeholder = "1:30 or 1.5"; dur.disabled = !canWrite;
+    dur.placeholder = "1:30:00 or 1.5"; dur.disabled = !canWrite;
     dur.setAttribute("aria-label", "How long it took");
     var go = document.createElement("button");
     go.type = "button"; go.dataset.act = "logtime"; go.textContent = "Log it";
@@ -1278,7 +1274,7 @@
       var dayEl = drawer.querySelector('[data-role="logday"]');
       var durEl = drawer.querySelector('[data-role="logdur"]');
       var ms = parseDuration(durEl.value);
-      if (ms === null){ toast("Give a length like 1:30, 1.5 or 90m."); durEl.focus(); return; }
+      if (ms === null){ toast("Give a length like 1:30:00, 1.5 or 90m."); durEl.focus(); return; }
       if (!ms){ durEl.focus(); return; }
       logEntry(t, dayEl.value, ms);
       toast("Logged " + clock(ms) + " on " + dateShort(new Date(dayEl.value + "T12:00:00").getTime()) + ".");
@@ -1316,7 +1312,7 @@
           }
         }
       });
-      if (bad){ toast("Give the total as 12:30, 12.5 or 90m."); bad.focus(); return; }
+      if (bad){ toast("Give the total as 12:30:00, 12.5 or 90m."); bad.focus(); return; }
       var notes = detail.querySelector('[data-act="notes"]');
       if (notes) patch.notes = notes.value.trim();
       openRows[t.id] = false;
