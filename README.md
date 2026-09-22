@@ -21,10 +21,12 @@ timer for billing, and links to its GitHub issue and pull request.
   totals for the last 7 days and everything unbilled, a per-task "Mark invoiced"
   flag, and a CSV timesheet export of whatever is currently filtered.
 - **Where the rate comes from** — the rate is a monthly retainer spread over a
-  standard working month (`hoursPerMonth` in `settings/app`, 160 by default:
-  40 hours a week over four weeks). The statement spells the arithmetic out for
-  whoever is paying: $5,000 a month ÷ 160 hours = $31.25 an hour, a full
-  8-hour day is $250, a 40-hour week is $1,250.
+  calendar-accurate working month. `settings/app` holds `hoursPerWeek` (40) and
+  `hoursPerMonth` (173.93): 365.2425 days ÷ 7 ÷ 12 = 4.35 weeks a month, not a
+  flat four. The statement spells the arithmetic out for whoever is paying:
+  $5,000 a month ÷ 173.93 hours = $28.75 an hour, an 8-hour day $229.98, a
+  40-hour week $1,149.89. Tasks carrying their own rate keep it, so historical
+  work is not restated when the default changes.
 - **Manual corrections** — ±5m / ±15m / +1h adjustments, a backdated entry
   ("Sep 11, 1:30") for work you did before you opened the board, and a per-task
   log of every time entry. Durations parse as `1:30`, `1.5`, `90m` or `1h30`.

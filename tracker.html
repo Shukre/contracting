@@ -440,7 +440,7 @@
 
   var db = null, users = null, myId = null, canWrite = true, isEditor = true;
   var tasks = [];
-  var settings = {defaultRate:31.25, currency:"USD", hoursPerMonth:160};
+  var settings = {defaultRate:28.747197148278044, currency:"USD", hoursPerWeek:40, hoursPerMonth:173.93};
   var filter = "all";
   var client = "all";
   var search = "";
@@ -492,28 +492,34 @@
     var d = new Date();
     return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10);
   }
-  /* The rate is a monthly retainer spread over a standard working month. */
+  /* The rate is a monthly retainer spread over a real working month —
+     40 hours a week across the calendar's true 4.35 weeks, not a flat four. */
+  function num(n){
+    return String(Math.round(n * 100) / 100);
+  }
   function basisParts(){
     var rate = Number(settings.defaultRate) || 0;
     var perMonth = Number(settings.hoursPerMonth) || 0;
-    if (!rate || !perMonth) return null;
-    var perWeek = Math.round(perMonth / 4);
-    var perDay = Math.round(perWeek / 5);
+    var perWeek = Number(settings.hoursPerWeek) || 40;
+    if (!rate || !perMonth || !perWeek) return null;
+    var perDay = perWeek / 5;
     return {
       rate: rate, perMonth: perMonth, perWeek: perWeek, perDay: perDay,
+      weeksPerMonth: perMonth / perWeek,
       monthly: rate * perMonth, weekly: rate * perWeek, daily: rate * perDay
     };
   }
   function basisSentence(){
     var b = basisParts();
     if (!b) return "";
-    return rateLabel(b.monthly) + " a month \u00f7 " + b.perMonth + " hours (" + b.perWeek +
-      " hours a week, four weeks) = " + rateLabel(b.rate) + " an hour. Every line is hours \u00d7 that rate, so a full " +
-      b.perDay + "-hour day is " + rateLabel(b.daily) + " and a " + b.perWeek + "-hour week is " + rateLabel(b.weekly) + ".";
+    return rateLabel(b.monthly) + " a month \u00f7 " + num(b.perMonth) + " hours = " + rateLabel(b.rate) +
+      " an hour. That month is " + num(b.perWeek) + " hours a week across " + num(b.weeksPerMonth) +
+      " weeks \u2014 the calendar average (365.2425 days \u00f7 7 \u00f7 12), not a flat four. Every line is hours \u00d7 that rate, so a full " +
+      num(b.perDay) + "-hour day is " + money(b.daily) + " and a " + num(b.perWeek) + "-hour week is " + money(b.weekly) + ".";
   }
   function basisShort(){
     var b = basisParts();
-    return b ? rateLabel(b.monthly) + "/mo \u00f7 " + b.perMonth + " h = " + rateLabel(b.rate) + "/h" : "";
+    return b ? rateLabel(b.monthly) + "/mo \u00f7 " + num(b.perMonth) + " h = " + rateLabel(b.rate) + "/h" : "";
   }
   function clock(ms){
     ms = Math.max(0, ms||0);
@@ -1319,7 +1325,7 @@
       renderStats(); renderList();
       saveLocal();
       if (db && !localOnly){
-        db.doc("settings/app").set({defaultRate:v, currency:settings.currency, hoursPerMonth:settings.hoursPerMonth}).then(function(){
+        db.doc("settings/app").set({defaultRate:v, currency:settings.currency, hoursPerMonth:settings.hoursPerMonth, hoursPerWeek:settings.hoursPerWeek}).then(function(){
           $("saveState").textContent = "saved";
           setTimeout(function(){ $("saveState").textContent = ""; }, 1500);
         }).catch(function(){ $("saveState").textContent = ""; });
@@ -1591,6 +1597,7 @@
           var s = snap.data();
           if (typeof s.defaultRate === "number") settings.defaultRate = s.defaultRate;
           if (typeof s.hoursPerMonth === "number") settings.hoursPerMonth = s.hoursPerMonth;
+          if (typeof s.hoursPerWeek === "number") settings.hoursPerWeek = s.hoursPerWeek;
           if (s.currency) settings.currency = s.currency;
           if (document.activeElement !== defRate) defRate.value = settings.defaultRate;
           renderStats(); renderList();
