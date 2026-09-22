@@ -255,6 +255,7 @@
   .stmt-head{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:6px}
   .stmt-head h2{font-family:var(--display);font-size:20px;margin:0;letter-spacing:-.02em}
   .stmt-head .meta{font-size:13px;color:var(--muted);margin-top:3px}
+  .stmt-head .basis{font-size:12px;color:var(--muted);margin-top:8px;max-width:72ch;line-height:1.55}
   .stmt-head .scope{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
   .stmt-head .scope input{width:auto}
   .stmt-group{margin-top:22px}
@@ -301,6 +302,7 @@
   .empty strong{display:block;font-family:var(--display);color:var(--ink);font-size:16px;margin-bottom:4px}
   .foot{margin-top:28px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:12px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
   .foot .spacer{margin-left:auto}
+  .ratebasis{font-family:var(--mono);font-size:11px;color:var(--muted)}
   .banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);color:var(--accent);border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:14px}
   .banner-act{border:1px solid currentColor;background:transparent;color:inherit;border-radius:6px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer}
   .banner-act:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
@@ -401,6 +403,7 @@
     <span class="spacer"></span>
     <label for="f-defrate" style="color:var(--muted)">Default rate</label>
     <input type="number" id="f-defrate" min="0" step="1" style="width:88px;padding:4px 8px;font-family:var(--mono);font-size:12px" aria-label="Default hourly rate">
+    <span id="rateBasis" class="ratebasis"></span>
     <span id="saveState"></span>
   </footer>
 </div>
@@ -420,7 +423,7 @@
 
   var db = null, users = null, myId = null, canWrite = true, isEditor = true;
   var tasks = [];
-  var settings = {defaultRate:95, currency:"USD"};
+  var settings = {defaultRate:31.25, currency:"USD", hoursPerMonth:160};
   var filter = "all";
   var client = "all";
   var search = "";
@@ -471,6 +474,29 @@
   function todayISO(){
     var d = new Date();
     return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  }
+  /* The rate is a monthly retainer spread over a standard working month. */
+  function basisParts(){
+    var rate = Number(settings.defaultRate) || 0;
+    var perMonth = Number(settings.hoursPerMonth) || 0;
+    if (!rate || !perMonth) return null;
+    var perWeek = Math.round(perMonth / 4);
+    var perDay = Math.round(perWeek / 5);
+    return {
+      rate: rate, perMonth: perMonth, perWeek: perWeek, perDay: perDay,
+      monthly: rate * perMonth, weekly: rate * perWeek, daily: rate * perDay
+    };
+  }
+  function basisSentence(){
+    var b = basisParts();
+    if (!b) return "";
+    return rateLabel(b.monthly) + " a month \u00f7 " + b.perMonth + " hours (" + b.perWeek +
+      " hours a week, four weeks) = " + rateLabel(b.rate) + " an hour. Every line is hours \u00d7 that rate, so a full " +
+      b.perDay + "-hour day is " + rateLabel(b.daily) + " and a " + b.perWeek + "-hour week is " + rateLabel(b.weekly) + ".";
+  }
+  function basisShort(){
+    var b = basisParts();
+    return b ? rateLabel(b.monthly) + "/mo \u00f7 " + b.perMonth + " h = " + rateLabel(b.rate) + "/h" : "";
   }
   function clock(ms){
     ms = Math.max(0, ms||0);
@@ -998,6 +1024,8 @@
     $("footCount").textContent = tasks.length + (tasks.length === 1 ? " task" : " tasks") +
       " · showing " + vis.length + " · " + hours(ms).toFixed(2) + " h · " + money(amt) +
       (localOnly ? " · this browser only" : "");
+    var rb = $("rateBasis");
+    if (rb) rb.textContent = basisShort();
   }
 
   function render(){
@@ -1272,7 +1300,7 @@
       renderStats(); renderList();
       saveLocal();
       if (db && !localOnly){
-        db.doc("settings/app").set({defaultRate:v, currency:settings.currency}).then(function(){
+        db.doc("settings/app").set({defaultRate:v, currency:settings.currency, hoursPerMonth:settings.hoursPerMonth}).then(function(){
           $("saveState").textContent = "saved";
           setTimeout(function(){ $("saveState").textContent = ""; }, 1500);
         }).catch(function(){ $("saveState").textContent = ""; });
@@ -1343,6 +1371,10 @@
     meta.textContent = "As of " + new Date().toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"}) +
       (stmtUnbilledOnly ? " · work not yet invoiced" : " · all tracked work");
     left.appendChild(meta);
+    var basis = document.createElement("div");
+    basis.className = "basis";
+    basis.textContent = basisSentence();
+    left.appendChild(basis);
     head.appendChild(left);
 
     var scope = document.createElement("label");
@@ -1539,6 +1571,7 @@
         if (snap.exists){
           var s = snap.data();
           if (typeof s.defaultRate === "number") settings.defaultRate = s.defaultRate;
+          if (typeof s.hoursPerMonth === "number") settings.hoursPerMonth = s.hoursPerMonth;
           if (s.currency) settings.currency = s.currency;
           if (document.activeElement !== defRate) defRate.value = settings.defaultRate;
           renderStats(); renderList();
