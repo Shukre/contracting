@@ -41,10 +41,11 @@ timer for billing, and links to its GitHub issue and pull request.
 - **Clients** — tag a task with a client, filter the board to one, and every
   total (tracked, unbilled, open) follows that filter. The CSV export is scoped
   to it too and names the file after it.
-- **Entering work after the fact** — the new-task form takes hours already
-  worked (`48`, `1:30`, `90m`), a status, and an "already paid" tick, so a piece
-  of finished work goes on the board in one step. Only the title is required;
-  the issue and PR are both optional.
+- **Entering work after the fact** — the new-task form takes a date, hours
+  already worked (`48`, `1:30`, `90m`), a status, and an "already paid" tick, so
+  a piece of finished work goes on the board in one step. The date carries the
+  hours with it, so backdated work counts toward the week it belongs to rather
+  than today. Only the title is required; the issue and PR are both optional.
 - **Runaway timer warning** — a timer running longer than four hours flags
   itself on the row, so an overnight timer doesn't quietly become nine
   billable hours.

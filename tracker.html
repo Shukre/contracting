@@ -389,6 +389,10 @@
         <input type="text" id="f-client" name="client" list="clientList" placeholder="Northwind">
       </div>
       <div class="field">
+        <label for="f-date">Date <span class="hint">— the day this work is dated</span></label>
+        <input type="date" id="f-date" name="date">
+      </div>
+      <div class="field">
         <label for="f-status">Status</label>
         <select id="f-status" name="status"></select>
       </div>
@@ -501,6 +505,13 @@
     m = raw.match(/^(\d+(?:\.\d+)?)$/);
     if (m) return Number(m[1]) * 3600000;
     return null;
+  }
+  /* An ISO day as an epoch at a given local hour; null when unparseable. */
+  function dayStart(iso, hour){
+    var parts = (iso||"").split("-");
+    if (parts.length !== 3) return null;
+    var d = new Date(Number(parts[0]), Number(parts[1])-1, Number(parts[2]), hour||12, 0, 0);
+    return isNaN(d.getTime()) ? null : d.getTime();
   }
   function todayISO(){
     var d = new Date();
@@ -862,7 +873,7 @@
     var who = document.createElement("span");
     who.className = "who";
     who.dataset.who = t.createdBy || "";
-    who.textContent = t.createdBy ? "added by someone" : ("added " + (t.createdAt ? dateShort(t.createdAt) : "here"));
+    who.textContent = t.createdAt ? dateShort(t.createdAt) : "";
     meta.appendChild(who);
     body.appendChild(meta);
     el.appendChild(body);
@@ -1190,7 +1201,7 @@
         var p = profiles[id];
         var name = (p && p.name) || "";
         var t = byId(n.closest(".task").dataset.id);
-        n.textContent = "added by " + (p && p.isMe ? "you" : (name || "a teammate")) + (t && t.createdAt ? " · " + dateShort(t.createdAt) : "");
+        n.textContent = (p && p.isMe ? "you" : (name || "a teammate")) + (t && t.createdAt ? " · " + dateShort(t.createdAt) : "");
       });
     }).catch(function(){});
   }
@@ -1215,10 +1226,7 @@
     });
   }
   function logEntry(t, dayStr, ms){
-    var parts = (dayStr||"").split("-");
-    var start = parts.length === 3
-      ? new Date(Number(parts[0]), Number(parts[1])-1, Number(parts[2]), 12, 0, 0).getTime()
-      : Date.now();
+    var start = dayStart(dayStr, 12) || Date.now();
     var sessions = (t.sessions||[]).concat([{start:start, end:start+ms, ms:ms, logged:true, by:myId||null}]).slice(-60);
     sessions.sort(function(a,b){ return (a.start||0) - (b.start||0); });
     writeTask(t.id, {accruedMs:(t.accruedMs||0) + ms, sessions:sessions});
@@ -1337,8 +1345,9 @@
 
   function openForm(){
     form.hidden = false;
-    $("f-rate").value = settings.defaultRate;
+    $("f-rate").value = Math.round(Number(settings.defaultRate) * 10000) / 10000;
     if (client !== "all" && !$("f-client").value) $("f-client").value = client;
+    if (!$("f-date").value) $("f-date").value = todayISO();
     $("f-title").focus();
   }
   $("newBtn").addEventListener("click", function(){
@@ -1353,7 +1362,7 @@
     var rateRaw = $("f-rate").value.trim();
     var hoursMs = parseDuration($("f-hours").value);
     if (hoursMs === null){ toast("Give the hours as 48, 1:30 or 90m."); $("f-hours").focus(); return; }
-    var now = Date.now();
+    var now = dayStart($("f-date").value, 12) || Date.now();
     var doc = {
       title: title,
       status: statusSel.value,
@@ -1369,7 +1378,7 @@
       createdBy: myId,
       createdAt: now,
       updatedAt: now,
-      sessions: []
+      sessions: hoursMs ? [{start:now, end:now + hoursMs, ms:hoursMs, logged:true, by:myId||null}] : []
     };
     var id = newId();
     tasks.push(normalize(id, doc));
