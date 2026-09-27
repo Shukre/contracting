@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// Billable keeps each board at a long random id that only its link carries
+// (https://…/#b=<id>). There are no accounts: holding the link is what grants
+// access, the way "anyone with the link" sharing works.
+//
+// What these rules allow:
+//   - read and write a board's tasks and settings, given its id
+// What they refuse:
+//   - listing boards, so nobody can discover ids they were not sent
+//   - collection-group queries across every board's tasks
+//   - boards with short, guessable ids
+//   - anything outside boards/{id}/tasks and boards/{id}/settings
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isBoard(boardId) {
+      return boardId.size() >= 20;
+    }
+
+    match /boards/{boardId}/tasks/{taskId} {
+      allow read, write: if isBoard(boardId);
+    }
+
+    match /boards/{boardId}/settings/{docId} {
+      allow read, write: if isBoard(boardId);
+    }
+  }
+}

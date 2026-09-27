@@ -59,6 +59,54 @@ timer for billing, and links to its GitHub issue and pull request.
 The board opens with three tasks tagged **Example** — delete them once your own
 work is on it.
 
+## Website (GitHub Pages + Firebase)
+
+The same board as a standalone site: `docs/index.html` is served by GitHub
+Pages, and tasks live in Firebase Firestore. It costs nothing at this scale —
+Firebase's free Spark plan needs no card and does not pause idle projects.
+
+**There are no accounts.** Each board lives at a long random link
+(`…/contracting/#b=Xk29…`); holding the link is what grants access, the way
+"anyone with the link" sharing works. `firestore.rules` enforces that: a board
+can be read and written only by someone who already knows its id, boards cannot
+be listed, and short guessable ids are refused. So treat your board link like a
+password — anyone you send it to can view *and edit* it.
+
+The Firebase config in the page source is public by design; the rules are what
+protect the data.
+
+### Setting it up
+
+1. **Create the database.** At [console.firebase.google.com](https://console.firebase.google.com),
+   add a project (Analytics can stay off). Open **Build → Firestore Database →
+   Create database**, choose **production mode** and a location near you.
+2. **Install the rules.** In Firestore's **Rules** tab, replace the contents
+   with `firestore.rules` from this repo and **Publish**. Skip this and the
+   database refuses everything, which fails safe but shows an error banner.
+3. **Connect the page.** In **Project settings → Your apps**, add a web app
+   (`</>`), then copy `apiKey`, `authDomain`, `projectId` and `appId` into
+   `FIREBASE_CONFIG` at the top of the script in `docs/index.html`.
+4. **Publish.** In the GitHub repo, **Settings → Pages → Deploy from a branch**,
+   pick the branch and the `/docs` folder. The site appears at
+   `https://shukre.github.io/contracting/`.
+5. **Open it.** A first visit creates a board and puts its link in the address
+   bar — bookmark it. Use **Import** in the footer to load an export file, and
+   **Copy board link** to share.
+
+Until step 3 is done, the site still works but keeps tasks in the browser only,
+and says so.
+
+### What changed from the artifact
+
+Only the platform layer. The artifact's shared store becomes Firestore behind
+the same small interface, so every other line runs unchanged; per-person
+identity becomes a per-browser id (so a timer belongs to the browser that
+started it); the CSV export becomes a plain download; and deletion is open to
+anyone with the link, since there is no owner to reserve it for.
+
+`tracker.html` is the artifact version and stays as it is. New work belongs in
+`docs/index.html`.
+
 ## Sharing
 
 The published page is private until it is shared. Open it, use **Share**, and
